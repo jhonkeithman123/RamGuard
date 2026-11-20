@@ -21,6 +21,9 @@ const SCOPE_LIST: &str = "/data/data/com.opencode.ramguard/files/rewardskip_scop
 const MODE_PRIVATE: &str = "/data/data/com.opencode.ramguard/files/skip_mode.txt";
 const MODE_PUBLIC: &str = "/data/local/tmp/skip_mode.txt";
 const LSPD_DB: &str = "/data/adb/lspd/config/modules_config.db";
+// Fallback when the device has no sqlite3 binary: Vector ships a CLI.
+const VECTOR_CLI: &str = "/data/adb/modules/zygisk_vector/cli";
+const REWARDSKIP_PKG: &str = "com.opencode.rewardskip";
 
 fn now() -> u64 {
     SystemTime::now()
@@ -114,11 +117,95 @@ fn read_config() -> (Vec<String>, u64, Vec<String>) {
     (targets, interval, kills)
 }
 
+fn has_sqlite3() -> bool {
+    !run("sqlite3", &["--version"]).trim().is_empty()
+}
+
+fn module_installed() -> bool {
+    if has_sqlite3() {
+        let sql = format!(
+            "select mid from modules where module_pkg_name='{}';", REWARDSKIP_PKG);
+        !run("sqlite3", &[LSPD_DB, &sql]).trim().is_empty()
+    } else {
+        std::path::Path::new(VECTOR_CLI).exists()
+            && run(VECTOR_CLI, &["modules", "ls"]).contains(REWARDSKIP_PKG)
+    }
+}
+
+fn scope_add(pkg: &str) {
+    if has_sqlite3() {
+        let sql = format!(
+            "select mid from modules where module_pkg_name='{}';", REWARDSKIP_PKG);
+        let mid = run("sqlite3", &[LSPD_DB, &sql]).trim().to_string();
+        if mid.is_empty() {
+            return;
+        }
+        let sql = format!(
+            "INSERT OR REPLACE INTO scope(mid,app_pkg_name,user_id) VALUES({},'{}',0);",
+            mid, pkg);
+        let _ = run("sqlite3", &[LSPD_DB, &sql]);
+    } else if std::path::Path::new(VECTOR_CLI).exists() {
+        let spec = format!("{}/0", pkg);
+        let _ = run(VECTOR_CLI, &["scope", "add", REWARDSKIP_PKG, &spec]);
+    } else {
+        log("cannot edit scope: neither sqlite3 nor vector-cli available");
+        return;
+    }
+    log(&format!("RewardSkip scope: added {}", pkg));
+}
+
+fn scope_remove(pkg: &str) {
+    if has_sqlite3() {
+        let sql = format!(
+            "select mid from modules where module_pkg_name='{}';", REWARDSKIP_PKG);
+        let mid = run("sqlite3", &[LSPD_DB, &sql]).trim().to_string();
+        if mid.is_empty() {
+            return;
+        }
+        let sql = format!("DELETE FROM scope WHERE mid={} AND app_pkg_name='{}';", mid, pkg);
+        let _ = run("sqlite3", &[LSPD_DB, &sql]);
+    } else if std::path::Path::new(VECTOR_CLI).exists() {
+        let spec = format!("{}/0", pkg);
+        let _ = run(VECTOR_CLI, &["scope", "rm", REWARDSKIP_PKG, &spec]);
+    } else {
+        log("cannot edit scope: neither sqlite3 nor vector-cli available");
+        return;
+    }
+    log(&format!("RewardSkip scope: removed {}", pkg));
+}
+
+fn scope_list() -> String {
+    if has_sqlite3() {
+        let sql = format!(
+            "select mid from modules where module_pkg_name='{}';", REWARDSKIP_PKG);
+        let mid = run("sqlite3", &[LSPD_DB, &sql]).trim().to_string();
+        if mid.is_empty() {
+            return String::new();
+        }
+        let sql = format!("select app_pkg_name from scope where mid={};", mid);
+        return run("sqlite3", &[LSPD_DB, &sql]);
+    }
+    if !std::path::Path::new(VECTOR_CLI).exists() {
+        return String::new();
+    }
+    let out = run(VECTOR_CLI, &["scope", "ls", REWARDSKIP_PKG]);
+    let mut result = String::new();
+    for line in out.lines() {
+        let t = line.trim();
+        if t.is_empty() || t.starts_with("APP_PACKAGE") || t.starts_with("---")
+            || t.contains("No records") {
+            continue;
+        }
+        if let Some(pkg) = t.split_whitespace().next() {
+            result.push_str(pkg);
+            result.push('\n');
+        }
+    }
+    result
+}
+
 fn sync_rewardskip_scope() {
-    let mid = run("sqlite3", &[LSPD_DB,
-        "select mid from modules where module_pkg_name='com.opencode.rewardskip';"]);
-    let mid = mid.trim();
-    if mid.is_empty() {
+    if !module_installed() {
         let _ = fs::write(SCOPE_LIST, "STATUS=NOT_INSTALLED\n");
         return;
     }
@@ -127,11 +214,7 @@ fn sync_rewardskip_scope() {
     if let Ok(req) = fs::read_to_string(SCOPE_REMOVE) {
         let pkg = req.trim();
         if !pkg.is_empty() && pkg.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_') {
-            let sql = format!(
-                "DELETE FROM scope WHERE mid={} AND app_pkg_name='{}';", mid, pkg
-            );
-            let _ = run("sqlite3", &[LSPD_DB, &sql]);
-            log(&format!("RewardSkip scope: removed {}", pkg));
+            scope_remove(pkg);
         }
         let _ = fs::remove_file(SCOPE_REMOVE);
     }
@@ -140,21 +223,14 @@ fn sync_rewardskip_scope() {
     if let Ok(req) = fs::read_to_string(SCOPE_REQ) {
         let pkg = req.trim();
         if !pkg.is_empty() && pkg.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_') {
-            let sql = format!(
-                "INSERT OR REPLACE INTO scope(mid,app_pkg_name,user_id) VALUES({},'{}',0);",
-                mid, pkg
-            );
-            let _ = run("sqlite3", &[LSPD_DB, &sql]);
-            log(&format!("RewardSkip scope: added {}", pkg));
+            scope_add(pkg);
         }
         let _ = fs::remove_file(SCOPE_REQ);
     }
 
     // publish current scope for the app
-    let sql = format!("select app_pkg_name from scope where mid={};", mid);
-    let list = run("sqlite3", &[LSPD_DB, &sql]);
     let mut out = String::from("STATUS=OK\n");
-    out.push_str(&list);
+    out.push_str(&scope_list());
     let _ = fs::write(SCOPE_LIST, out);
 }
 

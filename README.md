@@ -92,8 +92,10 @@ them if you really need to.
 
 ## RewardSkip scope and mode
 
-RamGuard discovers the RewardSkip module in the LSPosed database by its package name
-(`com.opencode.rewardskip`) and edits its scope directly. The menu shows:
+RamGuard discovers the RewardSkip module by its package name (`com.opencode.rewardskip`)
+and edits its scope directly. It prefers the framework's SQLite database (`sqlite3`), and
+falls back to the **Vector CLI** (`/data/adb/modules/zygisk_vector/cli`) on devices that do
+not ship a `sqlite3` binary — both LSPosed and Vector are supported. The menu shows:
 
 - **REWARDSKIP · GAME SCOPE** — add or remove games from the Xposed scope
 - **REWARDSKIP MODE** — switch between `instant` and `delayed`
