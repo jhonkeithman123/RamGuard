@@ -1,0 +1,8 @@
+# Copy to config.toml and set the path to your own NDK clang wrapper.
+# Example (Windows):
+# [target.aarch64-linux-android]
+# linker = "C:/Users/<you>/AppData/Local/Android/Sdk/ndk/<version>/toolchains/llvm/prebuilt/windows-x86_64/bin/aarch64-linux-android26-clang.cmd"
+#
+# Example (Linux/macOS):
+# [target.aarch64-linux-android]
+# linker = "<ANDROID_NDK_HOME>/toolchains/llvm/prebuilt/<host>/bin/aarch64-linux-android26-clang"

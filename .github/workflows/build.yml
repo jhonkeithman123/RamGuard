@@ -1,0 +1,39 @@
+name: Build RamGuard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK packages
+        run: |
+          sdkmanager "platforms;android-34" "build-tools;35.0.0" "ndk;27.1.12297006"
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.1.12297006" >> $GITHUB_ENV
+
+      - name: Set up Rust Android target
+        run: rustup target add aarch64-linux-android
+
+      - name: Build manager, daemon and module
+        run: python3 scripts/build_all.py
+
+      - name: Upload Magisk module
+        uses: actions/upload-artifact@v4
+        with:
+          name: RamGuard
+          path: build/RamGuard.zip

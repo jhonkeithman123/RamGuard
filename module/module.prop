@@ -1,0 +1,6 @@
+id=ramguard
+name=RamGuard (Game Memory Saver)
+version=1.0.0
+versionCode=1000000
+author=OpenCode
+description=Frees RAM when a game opens, hidden notification control panel, RewardSkip scope/mode management, safe zram1 swap expansion.

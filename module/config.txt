@@ -1,0 +1,13 @@
+# RamGuard config
+# target = package of the game that triggers cleanup
+target=droidhang.twgame.restaurant
+# interval = seconds between foreground checks
+interval=3
+# kill = background app to force-stop when the game opens
+# Add/remove lines to suit. Do NOT add system-critical apps
+# (GMS, microG, Magisk, LSPosed, AdAway) or login may break.
+kill=com.facebook.katana
+kill=com.facebook.orca
+kill=app.revanced.android.youtube
+kill=com.android.vending
+kill=com.google.android.play.games
