@@ -2,6 +2,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
+use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -117,8 +118,15 @@ fn read_config() -> (Vec<String>, u64, Vec<String>) {
     (targets, interval, kills)
 }
 
+static SQLITE3_AVAILABLE: OnceLock<bool> = OnceLock::new();
+
 fn has_sqlite3() -> bool {
-    !run("sqlite3", &["--version"]).trim().is_empty()
+    *SQLITE3_AVAILABLE.get_or_init(|| {
+        match Command::new("sqlite3").arg("--version").output() {
+            Ok(o) => o.status.success(),
+            Err(_) => false,
+        }
+    })
 }
 
 fn module_installed() -> bool {
