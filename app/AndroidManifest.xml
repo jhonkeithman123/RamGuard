@@ -21,7 +21,7 @@
         android:theme="@android:style/Theme.Material.NoActionBar">
 
         <service android:name=".GuardService" android:exported="false"/>
-        <activity android:name=".ConfigActivity" android:exported="false"/>
+        <activity android:name=".ConfigActivity" android:exported="true"/>
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
